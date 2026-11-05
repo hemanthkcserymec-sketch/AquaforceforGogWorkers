@@ -1,8 +1,9 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect, Suspense } from "react";
 import Image from "next/image";
 import Link from "next/link";
+import { useRouter, useSearchParams } from "next/navigation";
 import {
   ArrowRight,
   Loader2,
@@ -29,7 +30,10 @@ const CUSTOMER_TYPE_OPTIONS = [
   "Other",
 ];
 
-export default function InquiryFormPage() {
+function InquiryFormContent() {
+  const router = useRouter();
+  const searchParams = useSearchParams();
+
   const [formData, setFormData] = useState({
     fullName: "",
     phone: "",
@@ -41,6 +45,18 @@ export default function InquiryFormPage() {
     otherDescription: "",
     agreedToTerms: true,
   });
+
+  useEffect(() => {
+    const cat = searchParams.get("category");
+    if (cat) {
+      const match = CUSTOMER_TYPE_OPTIONS.find((opt) =>
+        opt.toLowerCase().includes(cat.toLowerCase())
+      );
+      if (match) {
+        setFormData((prev) => ({ ...prev, customerType: match }));
+      }
+    }
+  }, [searchParams]);
 
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [isSubmitted, setIsSubmitted] = useState(false);
@@ -134,17 +150,45 @@ export default function InquiryFormPage() {
       }
 
       setIsSubmitting(false);
-      setIsSubmitted(true);
+
       if (typeof window !== "undefined") {
-        window.scrollTo({ top: 0, behavior: "smooth" });
+        try {
+          sessionStorage.setItem(
+            "inquiry_data",
+            JSON.stringify({
+              fullName: formData.fullName.trim(),
+              phone: cleanPhone,
+              companyName: formData.companyName.trim(),
+              email: formData.email.trim(),
+              quantity: formData.quantity,
+              purchaseTimeline: formData.purchaseTimeline,
+              customerType: formData.customerType,
+              otherDescription: formData.otherDescription.trim(),
+            })
+          );
+        } catch (e) {
+          console.error(e);
+        }
       }
+
+      const params = new URLSearchParams();
+      if (formData.fullName.trim()) params.set("name", formData.fullName.trim());
+      if (cleanPhone) params.set("phone", cleanPhone);
+      if (formData.companyName.trim()) params.set("company", formData.companyName.trim());
+      if (formData.email.trim()) params.set("email", formData.email.trim());
+      if (formData.quantity) params.set("quantity", formData.quantity);
+      if (formData.purchaseTimeline) params.set("timeline", formData.purchaseTimeline);
+      const cType =
+        formData.customerType === "Other" && formData.otherDescription
+          ? formData.otherDescription.trim()
+          : formData.customerType;
+      if (cType) params.set("customerType", cType);
+
+      router.push(`/inquiryform/thank-you?${params.toString()}`);
     } catch (err: any) {
       console.error("Inquiry submission error:", err);
       setIsSubmitting(false);
-      setIsSubmitted(true);
-      if (typeof window !== "undefined") {
-        window.scrollTo({ top: 0, behavior: "smooth" });
-      }
+      setErrorMsg(err.message || "Failed to submit inquiry. Please try again.");
     }
   };
 
@@ -329,10 +373,10 @@ export default function InquiryFormPage() {
               /* Questionnaire Form */
               <form onSubmit={handleSubmit} className="space-y-4 sm:space-y-5">
                 <div className="pb-2 border-b border-slate-100 flex items-center justify-between gap-2">
-                  <h2 className="text-lg sm:text-xl font-bold font-montserrat text-slate-900 tracking-tight">
+                  <h2 className="text-[15px] xs:text-base sm:text-xl font-bold font-montserrat text-slate-900 tracking-tight leading-tight">
                     Inquiry Questionnaire
                   </h2>
-                  <span className="text-[11px] font-bold font-montserrat px-2.5 py-0.5 rounded-full bg-blue-50 text-[#005DA6] border border-blue-200">
+                  <span className="text-[10px] xs:text-[11px] font-bold font-montserrat px-2 sm:px-2.5 py-0.5 rounded-full bg-blue-50 text-[#005DA6] border border-blue-200 whitespace-nowrap shrink-0">
                     B2B & Fleet Orders
                   </span>
                 </div>
@@ -606,5 +650,19 @@ export default function InquiryFormPage() {
         </div>
       </footer>
     </div>
+  );
+}
+
+export default function InquiryFormPage() {
+  return (
+    <Suspense
+      fallback={
+        <div className="min-h-screen bg-[#07090e] flex items-center justify-center text-white font-open-sans">
+          Loading...
+        </div>
+      }
+    >
+      <InquiryFormContent />
+    </Suspense>
   );
 }

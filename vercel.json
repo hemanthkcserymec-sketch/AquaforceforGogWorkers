@@ -9,6 +9,14 @@
       "destination": "/aquaforceforgigworkers/thank-you"
     },
     {
+      "source": "/inquiryform",
+      "destination": "/aquaforceforgigworkers/inquiryform"
+    },
+    {
+      "source": "/inquiryform/:path*",
+      "destination": "/aquaforceforgigworkers/inquiryform/:path*"
+    },
+    {
       "source": "/privacy-policy",
       "destination": "/aquaforceforgigworkers/privacy-policy"
     },

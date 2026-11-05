@@ -1,7 +1,7 @@
 "use client";
 
 import React, { createContext, useContext, useState } from "react";
-import BulkEnquiryModal from "@/components/BulkEnquiryModal";
+import { useRouter } from "next/navigation";
 
 export interface BulkEnquiryOptions {
   category?: string;
@@ -22,17 +22,20 @@ const BulkEnquiryContext = createContext<BulkEnquiryContextType>({
 });
 
 export function BulkEnquiryProvider({ children }: { children: React.ReactNode }) {
+  const router = useRouter();
   const [isOpen, setIsOpen] = useState(false);
   const [initialOptions, setInitialOptions] = useState<BulkEnquiryOptions | undefined>(undefined);
 
   const openBulkModal = (options?: BulkEnquiryOptions | React.MouseEvent | any) => {
-    // If passed as an event handler (e.g. onClick={openBulkModal}), ignore the event object
-    if (options && (options.nativeEvent || options._reactName || typeof options.preventDefault === "function")) {
-      setInitialOptions(undefined);
-    } else {
-      setInitialOptions(options);
+    let target = "/inquiryform";
+    if (options && !options.nativeEvent && !options._reactName && typeof options.preventDefault !== "function") {
+      const params = new URLSearchParams();
+      if (options.category) params.set("category", options.category);
+      if (options.notes) params.set("notes", options.notes);
+      const q = params.toString();
+      if (q) target += `?${q}`;
     }
-    setIsOpen(true);
+    router.push(target);
   };
   const closeBulkModal = () => {
     setIsOpen(false);
@@ -85,13 +88,8 @@ export function BulkEnquiryProvider({ children }: { children: React.ReactNode })
   }, []);
 
   return (
-    <BulkEnquiryContext.Provider value={{ isOpen, initialOptions, openBulkModal, closeBulkModal }}>
+    <BulkEnquiryContext.Provider value={{ isOpen: false, initialOptions, openBulkModal, closeBulkModal }}>
       {children}
-      <BulkEnquiryModal
-        isOpen={isOpen}
-        initialOptions={initialOptions}
-        onClose={closeBulkModal}
-      />
     </BulkEnquiryContext.Provider>
   );
 }
