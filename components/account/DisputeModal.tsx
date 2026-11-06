@@ -118,18 +118,24 @@ export default function DisputeModal({
       setError("Please describe the issue in detail so our team can resolve it immediately.");
       return;
     }
-    if (!unboxingVideo.trim()) {
-      setError("Mandatory Requirement 1 missing: Please provide the Unboxing Video of the washer system.");
-      return;
+
+    const effectiveUnboxing =
+      unboxingVideo.trim() ||
+      (resolution === "refund" ? "Provided via WhatsApp or Direct Inspection" : "");
+    const effectiveTesting =
+      testingVideo.trim() ||
+      (resolution === "refund" ? "Provided via WhatsApp or Direct Inspection" : "");
+    const effectiveReview =
+      customerReview.trim() ||
+      (resolution === "refund" ? "Return request submitted from account" : "");
+
+    if (resolution !== "refund") {
+      if (!effectiveTesting) {
+        setError("Please provide the Testing Video or type 'Sent via WhatsApp to 7387588963'");
+        return;
+      }
     }
-    if (!testingVideo.trim()) {
-      setError("Mandatory Requirement 2 missing: Please provide the Testing Video of the washer system along with vacuum.");
-      return;
-    }
-    if (!customerReview.trim()) {
-      setError("Mandatory Requirement 3 missing: Please provide your Customer Review & Feedback comment or video link.");
-      return;
-    }
+
     setError("");
     setSubmitting(true);
 
@@ -141,13 +147,13 @@ export default function DisputeModal({
           orderId: selectedOrderId || activeOrder?.id,
           phone: customerPhone,
           fullName: customerName,
-          type: resolution === "refund" ? "dispute" : "replacement",
+          type: resolution === "refund" ? "return_refund" : "replacement",
           reason,
           preferredResolution: resolution,
           description,
-          unboxingVideo: unboxingVideo.trim(),
-          testingVideo: testingVideo.trim(),
-          customerReview: customerReview.trim(),
+          unboxingVideo: effectiveUnboxing,
+          testingVideo: effectiveTesting,
+          customerReview: effectiveReview,
         }),
       });
 
@@ -183,10 +189,10 @@ export default function DisputeModal({
             </div>
             <div>
               <h3 className="text-base sm:text-lg font-bold font-montserrat text-[#0F1729]">
-                File a Replacement / Dispute
+                File a Return, Replacement, or Claim
               </h3>
               <p className="text-xs text-slate-500 font-open-sans">
-                PROMEC 1-Year Pan-India Warranty & 7-Day Hassle-Free Replacement
+                7-Day Return Guarantee &amp; 1-Year PROMEC Pan-India Warranty
               </p>
             </div>
           </div>
@@ -406,43 +412,48 @@ export default function DisputeModal({
                 <ShieldAlert size={17} className="text-amber-700 shrink-0" />
                 <div>
                   <h4 className="text-xs font-bold uppercase tracking-wider text-amber-950 font-montserrat">
-                    5. Mandatory Proofs for Claim &amp; Replacement
+                    5. {resolution === "refund" ? "Product Photos / Proof (Optional)" : "Verification Proofs for Claim & Replacement"}
                   </h4>
                   <p className="text-[11px] text-amber-800 font-open-sans">
-                    All 3 proofs below are strictly required to approve warranty claims and replacements:
+                    {resolution === "refund"
+                      ? "Helpful for faster approval. If not available now, you can share via WhatsApp to +91 73875 88963:"
+                      : "Testing video is strictly required to verify the issue and approve your replacement:"}
                   </p>
                 </div>
               </div>
 
               <div className="space-y-3 text-xs font-open-sans">
                 {/* 1. Unboxing Video */}
-                <div className="p-3 bg-white rounded-xl border border-amber-200/70 space-y-1.5 shadow-2xs">
+                <div className="p-3 bg-white rounded-xl border border-slate-200/80 space-y-1.5 shadow-2xs">
                   <label className="font-bold text-slate-900 font-montserrat flex items-center justify-between text-xs">
-                    <span>1. Unboxing Video of Washer System *</span>
-                    <span className="text-[10px] bg-rose-100 text-rose-700 px-2 py-0.5 rounded font-bold uppercase">Mandatory</span>
+                    <span>1. Unboxing Video of Washer System</span>
+                    <span className="text-[10px] bg-slate-100 text-slate-600 px-2 py-0.5 rounded font-bold uppercase">Optional</span>
                   </label>
                   <input
                     type="text"
-                    required
-                    placeholder="Paste Google Drive / YouTube link, or type 'Sent via WhatsApp to 7387588963'"
+                    placeholder="Paste Google Drive / YouTube link, or type 'Sent via WhatsApp to 7387588963' (Optional)"
                     value={unboxingVideo}
                     onChange={(e) => setUnboxingVideo(e.target.value)}
                     className="w-full bg-slate-50 border border-slate-200 focus:bg-white focus:border-[#0066cc] rounded-lg p-2.5 text-xs text-slate-900 outline-none transition-all font-open-sans"
                   />
                   <p className="text-[10.5px] text-slate-500">
-                    Must clearly capture box unsealing and the machine + all accessories inside.
+                    If available, capture box unsealing and the machine + all accessories inside.
                   </p>
                 </div>
 
                 {/* 2. Testing Video with Vacuum */}
                 <div className="p-3 bg-white rounded-xl border border-amber-200/70 space-y-1.5 shadow-2xs">
                   <label className="font-bold text-slate-900 font-montserrat flex items-center justify-between text-xs">
-                    <span>2. Testing Video of Washer System Along with Vacuum *</span>
-                    <span className="text-[10px] bg-rose-100 text-rose-700 px-2 py-0.5 rounded font-bold uppercase">Mandatory</span>
+                    <span>2. Testing Video of Washer System Along with Vacuum {resolution !== "refund" && "*"}</span>
+                    {resolution === "refund" ? (
+                      <span className="text-[10px] bg-slate-100 text-slate-600 px-2 py-0.5 rounded font-bold uppercase">Optional / WhatsApp</span>
+                    ) : (
+                      <span className="text-[10px] bg-rose-100 text-rose-700 px-2 py-0.5 rounded font-bold uppercase">Mandatory</span>
+                    )}
                   </label>
                   <input
                     type="text"
-                    required
+                    required={resolution !== "refund"}
                     placeholder="Paste video link showing pressure output and vacuum in operation"
                     value={testingVideo}
                     onChange={(e) => setTestingVideo(e.target.value)}
@@ -452,22 +463,6 @@ export default function DisputeModal({
                     Demonstrate the high pressure spray output and the vacuum suction unit running.
                   </p>
                 </div>
-
-                {/* 3. Customer Review & Feedback */}
-                <div className="p-3 bg-white rounded-xl border border-amber-200/70 space-y-1.5 shadow-2xs">
-                  <label className="font-bold text-slate-900 font-montserrat flex items-center justify-between text-xs">
-                    <span>3. Customer Review &amp; Feedback (Comment or Video Link) *</span>
-                    <span className="text-[10px] bg-rose-100 text-rose-700 px-2 py-0.5 rounded font-bold uppercase">Mandatory</span>
-                  </label>
-                  <textarea
-                    rows={2}
-                    required
-                    placeholder="Share your authentic review and feedback regarding the product performance..."
-                    value={customerReview}
-                    onChange={(e) => setCustomerReview(e.target.value)}
-                    className="w-full bg-slate-50 border border-slate-200 focus:bg-white focus:border-[#0066cc] rounded-lg p-2.5 text-xs text-slate-900 outline-none transition-all font-open-sans leading-relaxed"
-                  />
-                </div>
               </div>
             </div>
 
@@ -475,7 +470,10 @@ export default function DisputeModal({
             <div className="p-3 bg-blue-50/70 border border-blue-200 rounded-xl text-xs text-blue-900 flex items-start gap-2.5 font-open-sans">
               <ShieldAlert size={16} className="text-[#0066cc] shrink-0 mt-0.5" />
               <span>
-                <strong>Zero Delay Policy:</strong> Under PROMEC India Warranty, genuine replacement parts or replacement units are approved directly without courier return friction.
+                <strong>{resolution === "refund" ? "7-Day Return Guarantee:" : "Zero Delay Policy:"}</strong>{" "}
+                {resolution === "refund"
+                  ? "Eligible orders can be returned within 7 days of delivery. Our logistics team will review and initiate a Delhivery doorstep pickup."
+                  : "Under PROMEC India Warranty, genuine replacement parts or replacement units are approved directly without courier return friction."}
               </span>
             </div>
 
@@ -494,11 +492,11 @@ export default function DisputeModal({
                 className="px-6 py-2.5 text-xs font-bold font-montserrat uppercase tracking-wider bg-rose-600 hover:bg-rose-500 active:bg-rose-700 text-white rounded-xl shadow-md shadow-rose-600/20 transition-all flex items-center gap-2 cursor-pointer disabled:opacity-50"
               >
                 {submitting ? (
-                  <span>Registering Claim...</span>
+                  <span>Processing...</span>
                 ) : (
                   <>
                     <Send size={13} />
-                    <span>Submit Claim Now</span>
+                    <span>{resolution === "refund" ? "Submit Return Request" : "Submit Claim Now"}</span>
                   </>
                 )}
               </button>

@@ -18,12 +18,29 @@ function ThankYouContent() {
   const method = searchParams.get("method") || "PREPAID";
   const waybill = searchParams.get("waybill") || "";
   const customerName = searchParams.get("name") || searchParams.get("fullName") || "";
+  const phone = searchParams.get("phone") || searchParams.get("customerPhone") || "";
 
   const isCod = method.toUpperCase().includes("COD") || Number(codBalance) > 0;
   const formattedAmount = Number(amount).toLocaleString("en-IN");
   const formattedCodBalance = Number(codBalance).toLocaleString("en-IN");
 
   useEffect(() => {
+    // Auto-authenticate customer session if phone is passed
+    if (phone && typeof window !== "undefined") {
+      const clean = phone.replace(/\D/g, "").slice(-10);
+      if (clean.length === 10) {
+        const userObj = {
+          phone: clean,
+          fullName: (customerName || "Customer").trim(),
+        };
+        try {
+          localStorage.setItem("aquaforce_user", JSON.stringify(userObj));
+          localStorage.setItem("promec_verified_user", JSON.stringify(userObj));
+          window.dispatchEvent(new Event("aquaforce_auth_changed"));
+        } catch (e) {}
+      }
+    }
+
     // Trigger Meta Pixel Purchase Conversion Event
     if (typeof window !== "undefined" && (window as any).fbq) {
       (window as any).fbq("track", "Purchase", {
@@ -179,7 +196,7 @@ function ThankYouContent() {
           {/* Bottom Action Buttons */}
           <div className="mt-6 sm:mt-8 space-y-2.5">
             <Link
-              href={orderId ? `/account?orderId=${orderId}` : "/account"}
+              href={orderId ? `/account?orderId=${encodeURIComponent(orderId)}&tab=orders` : "/account?tab=orders"}
               className="w-full block bg-[#0077c8] hover:bg-[#0066b3] active:bg-[#005599] text-white font-bold font-montserrat uppercase tracking-wider py-3.5 sm:py-4 rounded-[12px] shadow-sm hover:shadow-md transition-all cursor-pointer text-xs sm:text-sm text-center"
             >
               TRACK ORDER IN MY ACCOUNT

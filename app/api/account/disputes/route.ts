@@ -69,16 +69,22 @@ export async function POST(req: Request) {
       );
     }
 
-    const unboxingVideo = (body.unboxingVideo || body.verificationProof?.unboxingVideo || "").trim();
-    const testingVideo = (body.testingVideo || body.verificationProof?.testingVideo || "").trim();
-    const customerReview = (body.customerReview || body.verificationProof?.customerReview || "").trim();
+    const unboxingVideo =
+      (body.unboxingVideo || body.verificationProof?.unboxingVideo || "").trim() ||
+      (preferredResolution === "refund" ? "Provided via WhatsApp or Direct Inspection" : "");
+    const testingVideo =
+      (body.testingVideo || body.verificationProof?.testingVideo || "").trim() ||
+      (preferredResolution === "refund" ? "Provided via WhatsApp or Direct Inspection" : "");
+    const customerReview =
+      (body.customerReview || body.verificationProof?.customerReview || "").trim() ||
+      (preferredResolution === "refund" ? "Return request notes provided" : "");
 
-    if (!unboxingVideo || !testingVideo || !customerReview) {
+    if (preferredResolution !== "refund" && !testingVideo) {
       return NextResponse.json(
         {
           success: false,
           error:
-            "Warranty claims & replacements strictly require all 3 proofs: 1. Unboxing video of the washer system, 2. Testing video of washer system along with vacuum, and 3. Customer review & feedback.",
+            "Warranty claims & replacements require verification details: Testing video of washer system along with vacuum (or type 'Sent via WhatsApp to 7387588963').",
         },
         { status: 400 }
       );

@@ -176,7 +176,7 @@ const sections: PolicySection[] = [
           {[
             {
               step: "1",
-              title: "Unboxing Video",
+              title: "Unboxing Video (Optional)",
               description:
                 "Record a clear, continuous video while unboxing the AquaForce washer system and its accessories.",
             },
@@ -185,12 +185,6 @@ const sections: PolicySection[] = [
               title: "Product Testing Video",
               description:
                 "Record a video showing the washer system being tested along with the vacuum cleaner.",
-            },
-            {
-              step: "3",
-              title: "Customer Review & Feedback",
-              description:
-                "Share your experience with the product through a review, feedback, video, or comment.",
             },
           ].map((item) => (
             <div key={item.step} className="flex items-start gap-3 sm:gap-4">

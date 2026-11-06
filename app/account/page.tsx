@@ -47,6 +47,7 @@ const OrderTrackingModal = dynamic(() => import("@/components/account/OrderTrack
 const DisputeModal = dynamic(() => import("@/components/account/DisputeModal"), { ssr: false });
 const InvoiceModal = dynamic(() => import("@/components/account/InvoiceModal"), { ssr: false });
 const SupportModal = dynamic(() => import("@/components/account/SupportModal"), { ssr: false });
+const CancelOrderModal = dynamic(() => import("@/components/account/CancelOrderModal"), { ssr: false });
 
 type TabType = "orders" | "disputes" | "support" | "profile";
 
@@ -78,9 +79,9 @@ function AccountDashboardContent() {
   });
   const [authChecked, setAuthChecked] = useState(true);
 
-  // Tab state (defaults to "profile", or "orders" if orderId is specified in URL)
+  // Tab state (defaults to "orders", or queryTab if specified)
   const [activeTab, setActiveTab] = useState<TabType>(
-    queryTab || (queryOrderId ? "orders" : "profile")
+    queryTab || "orders"
   );
 
   // Data states
@@ -89,13 +90,14 @@ function AccountDashboardContent() {
   const [profile, setProfile] = useState<any>(null);
   const [loading, setLoading] = useState(false);
   const [searchQuery, setSearchQuery] = useState("");
-  const [orderFilter, setOrderFilter] = useState<"all" | "in_transit" | "delivered" | "cod">("all");
+  const [orderFilter, setOrderFilter] = useState<"all" | "in_transit" | "delivered" | "cancelled" | "cod">("all");
 
   // Modals state
   const [selectedOrderForTracking, setSelectedOrderForTracking] = useState<PromecOrder | null>(null);
   const [selectedOrderForDispute, setSelectedOrderForDispute] = useState<PromecOrder | null>(null);
   const [isDisputeModalOpen, setIsDisputeModalOpen] = useState(false);
   const [selectedOrderForInvoice, setSelectedOrderForInvoice] = useState<PromecOrder | null>(null);
+  const [selectedOrderForCancel, setSelectedOrderForCancel] = useState<PromecOrder | null>(null);
   const [isSupportModalOpen, setIsSupportModalOpen] = useState(false);
 
   // Profile edit state
@@ -405,10 +407,13 @@ function AccountDashboardContent() {
     if (!matchesSearch) return false;
 
     if (orderFilter === "in_transit") {
-      return o.orderStatus === "shipped" || Boolean(o.fulfillment.waybill);
+      return (o.orderStatus === "shipped" || Boolean(o.fulfillment.waybill)) && o.orderStatus !== "delivered" && o.orderStatus !== "cancelled";
     }
     if (orderFilter === "delivered") {
       return o.orderStatus === "delivered";
+    }
+    if (orderFilter === "cancelled") {
+      return o.orderStatus === "cancelled";
     }
     if (orderFilter === "cod") {
       return o.payment.method === "COD_ADVANCE";
@@ -432,8 +437,14 @@ function AccountDashboardContent() {
 
   // Count metrics
   const totalOrdersCount = orders.length;
-  const inTransitCount = orders.filter((o) => o.orderStatus === "shipped" || Boolean(o.fulfillment.waybill)).length;
-  const deliveredCount = orders.filter((o) => o.orderStatus === "delivered").length;
+  const inTransitCount = orders.filter((o) => (o?.orderStatus === "shipped" || Boolean(o?.fulfillment?.waybill)) && o?.orderStatus !== "delivered" && o?.orderStatus !== "cancelled").length;
+  const deliveredCount = orders.filter((o) => o?.orderStatus === "delivered").length;
+  const cancelledCount = orders.filter((o) => o?.orderStatus === "cancelled").length;
+  const hasPlacedOrder = orders.some(
+    (o) =>
+      ["confirmed", "processing", "shipped", "delivered"].includes(o?.orderStatus) ||
+      o?.payment?.status === "captured"
+  );
   const openDisputesCount = disputes.filter((d) => d.status !== "resolved" && d.status !== "rejected").length;
   const displayName = profile?.fullName || user.fullName || "Customer";
   const initials = displayName.charAt(0).toUpperCase();
@@ -489,24 +500,9 @@ function AccountDashboardContent() {
 
       {/* Main Content Area */}
       <main className="flex-1 max-w-[1360px] w-full mx-auto px-3.5 sm:px-6 lg:px-8 py-4 sm:py-6">
-        {/* MOBILE NAVIGATION TABS (4 columns: Profile, Orders, Claims, Warranty) */}
+        {/* MOBILE NAVIGATION TABS (4 columns: Orders, Profile, Claims, Warranty) */}
         <div className="md:hidden mb-4">
           <div className="grid grid-cols-4 gap-1 p-1 bg-slate-200/70 rounded-xl">
-            <button
-              type="button"
-              onClick={() => setActiveTab("profile")}
-              className={`flex flex-col items-center justify-center py-2 px-1 rounded-lg transition-all cursor-pointer ${
-                activeTab === "profile"
-                  ? "bg-white text-[#0066cc] font-bold shadow-2xs"
-                  : "text-slate-600 font-medium hover:text-slate-900"
-              }`}
-            >
-              <User size={16} className="shrink-0" />
-              <span className="text-[10px] font-montserrat mt-0.5 leading-tight truncate">
-                Profile
-              </span>
-            </button>
-
             <button
               type="button"
               onClick={() => setActiveTab("orders")}
@@ -519,6 +515,21 @@ function AccountDashboardContent() {
               <Package size={16} className="shrink-0" />
               <span className="text-[10px] font-montserrat mt-0.5 leading-tight truncate">
                 Orders ({totalOrdersCount})
+              </span>
+            </button>
+
+            <button
+              type="button"
+              onClick={() => setActiveTab("profile")}
+              className={`flex flex-col items-center justify-center py-2 px-1 rounded-lg transition-all cursor-pointer ${
+                activeTab === "profile"
+                  ? "bg-white text-[#0066cc] font-bold shadow-2xs"
+                  : "text-slate-600 font-medium hover:text-slate-900"
+              }`}
+            >
+              <User size={16} className="shrink-0" />
+              <span className="text-[10px] font-montserrat mt-0.5 leading-tight truncate">
+                Profile
               </span>
             </button>
 
@@ -573,23 +584,9 @@ function AccountDashboardContent() {
               </div>
             </div>
 
-            {/* Vertical Navigation Links: Profile (first) -> Orders -> Claims & Replacements -> 1-Year Warranty & Help */}
+            {/* Vertical Navigation Links: Orders (first) -> Profile -> Claims & Replacements -> 1-Year Warranty & Help */}
             <nav className="space-y-1.5 flex-1">
-              {/* 1. Profile (FIRST) */}
-              <button
-                type="button"
-                onClick={() => setActiveTab("profile")}
-                className={`w-full flex items-center gap-3 px-3.5 py-3 rounded-xl text-xs sm:text-sm font-bold font-montserrat transition-all cursor-pointer text-left ${
-                  activeTab === "profile"
-                    ? "bg-[#0066cc] text-white shadow-xs"
-                    : "bg-white text-slate-700 hover:text-slate-900 hover:bg-slate-100/80 border border-transparent"
-                }`}
-              >
-                <User size={18} className="shrink-0" />
-                <span className="truncate">Profile</span>
-              </button>
-
-              {/* 2. Orders */}
+              {/* 1. Orders (FIRST) */}
               <button
                 type="button"
                 onClick={() => setActiveTab("orders")}
@@ -612,6 +609,20 @@ function AccountDashboardContent() {
                 >
                   {totalOrdersCount}
                 </span>
+              </button>
+
+              {/* 2. Profile */}
+              <button
+                type="button"
+                onClick={() => setActiveTab("profile")}
+                className={`w-full flex items-center gap-3 px-3.5 py-3 rounded-xl text-xs sm:text-sm font-bold font-montserrat transition-all cursor-pointer text-left ${
+                  activeTab === "profile"
+                    ? "bg-[#0066cc] text-white shadow-xs"
+                    : "bg-white text-slate-700 hover:text-slate-900 hover:bg-slate-100/80 border border-transparent"
+                }`}
+              >
+                <User size={18} className="shrink-0" />
+                <span className="truncate">Profile</span>
               </button>
 
               {/* 3. Claims & Replacements (0) */}
@@ -782,6 +793,18 @@ function AccountDashboardContent() {
                 >
                   Delivered ({deliveredCount})
                 </button>
+                {cancelledCount > 0 && (
+                  <button
+                    onClick={() => setOrderFilter("cancelled")}
+                    className={`px-2.5 py-1.5 rounded-lg text-xs font-bold font-montserrat transition-all cursor-pointer shrink-0 ${
+                      orderFilter === "cancelled"
+                        ? "bg-rose-600 text-white shadow-xs"
+                        : "text-slate-600 hover:text-slate-900 hover:bg-slate-100"
+                    }`}
+                  >
+                    Cancelled ({cancelledCount})
+                  </button>
+                )}
                 <button
                   onClick={() => setOrderFilter("cod")}
                   className={`px-2.5 py-1.5 rounded-lg text-xs font-bold font-montserrat transition-all cursor-pointer shrink-0 ${
@@ -885,6 +908,8 @@ function AccountDashboardContent() {
                           >
                             {order.orderStatus === "delivered"
                               ? "Delivered"
+                              : order.orderStatus === "cancelled"
+                              ? "Cancelled"
                               : waybill
                               ? "In-Transit"
                               : "Confirmed"}
@@ -922,10 +947,12 @@ function AccountDashboardContent() {
                               <span>Color: <strong className="text-slate-900 font-montserrat">{item.color}</strong></span>
                             </div>
 
-                            <div className="flex items-center gap-1 text-[10px] sm:text-[11px] text-amber-800 bg-amber-50/80 border border-amber-200/60 px-2 py-0.5 rounded-md w-fit font-medium font-open-sans mt-1">
-                              <ShieldCheck size={11} className="text-amber-600 shrink-0" />
-                              <span>1-Year Pan-India Warranty Active</span>
-                            </div>
+                            {order.orderStatus !== "pending_payment" && order.orderStatus !== "cancelled" && order.orderStatus !== "refunded" && (
+                              <div className="flex items-center gap-1 text-[10px] sm:text-[11px] text-amber-800 bg-amber-50/80 border border-amber-200/60 px-2 py-0.5 rounded-md w-fit font-medium font-open-sans mt-1">
+                                <ShieldCheck size={11} className="text-amber-600 shrink-0" />
+                                <span>1-Year Pan-India Warranty Active</span>
+                              </div>
+                            )}
                           </div>
                         </div>
 
@@ -975,30 +1002,91 @@ function AccountDashboardContent() {
                         </div>
                       </div>
 
+                      {/* Cancellation Status Banner */}
+                      {order.orderStatus === "cancelled" && (
+                        <div className="bg-rose-50 border border-rose-200/90 rounded-xl p-3 flex items-start gap-2.5 text-xs text-rose-900 font-open-sans">
+                          <AlertCircle size={16} className="text-rose-600 shrink-0 mt-0.5" />
+                          <div className="space-y-1">
+                            <span className="font-bold font-montserrat block">Order Cancelled</span>
+                            <p className="text-[11.5px] text-rose-800 leading-relaxed">
+                              {(order as any).cancellation?.reason || "This order was cancelled by customer."}
+                              {waybill && " Forward transit has been stopped and Delhivery Return-to-Origin (RTO) has been initiated."}
+                            </p>
+                            {waybill && (
+                              <p className="text-[11px] font-semibold text-rose-700">
+                                If a Delhivery courier attempts delivery at your doorstep, please refuse handover citing &quot;Order Cancelled&quot;.
+                              </p>
+                            )}
+                          </div>
+                        </div>
+                      )}
+
                       {/* Action Bar (Mobile-Optimized Grid) */}
                       <div className="space-y-1.5 pt-1">
-                        <div className="grid grid-cols-2 gap-2">
-                          <button
-                            type="button"
-                            onClick={() => setSelectedOrderForTracking(order)}
-                            className="w-full py-2.5 rounded-xl bg-[#0066cc] hover:bg-[#0052b3] text-white text-xs font-bold font-montserrat uppercase tracking-wider transition-all flex items-center justify-center gap-1.5 cursor-pointer shadow-xs"
-                          >
-                            <Truck size={14} className="shrink-0" />
-                            <span className="truncate">Live Tracking</span>
-                          </button>
+                        {order.orderStatus === "cancelled" ? (
+                          <div className="grid grid-cols-2 gap-2">
+                            <button
+                              type="button"
+                              onClick={() => setSelectedOrderForTracking(order)}
+                              className="w-full py-2.5 rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-700 text-xs font-bold font-montserrat uppercase tracking-wider transition-all flex items-center justify-center gap-1.5 cursor-pointer"
+                            >
+                              <Truck size={14} className="shrink-0" />
+                              <span className="truncate">Tracking History</span>
+                            </button>
 
-                          <button
-                            type="button"
-                            onClick={() => {
-                              setSelectedOrderForDispute(order);
-                              setIsDisputeModalOpen(true);
-                            }}
-                            className="w-full py-2.5 rounded-xl bg-rose-50 hover:bg-rose-100 text-rose-700 border border-rose-200 text-xs font-bold font-montserrat uppercase tracking-wider transition-all flex items-center justify-center gap-1.5 cursor-pointer"
-                          >
-                            <RotateCcw size={14} className="shrink-0" />
-                            <span className="truncate">Claim / Replace</span>
-                          </button>
-                        </div>
+                            <button
+                              type="button"
+                              onClick={() => setIsSupportModalOpen(true)}
+                              className="w-full py-2.5 rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-700 border border-slate-200 text-xs font-bold font-montserrat uppercase tracking-wider transition-all flex items-center justify-center gap-1.5 cursor-pointer"
+                            >
+                              <Headphones size={14} className="shrink-0" />
+                              <span className="truncate">Contact Support</span>
+                            </button>
+                          </div>
+                        ) : order.orderStatus === "delivered" ? (
+                          <div className="grid grid-cols-2 gap-2">
+                            <button
+                              type="button"
+                              onClick={() => setSelectedOrderForTracking(order)}
+                              className="w-full py-2.5 rounded-xl bg-[#0066cc] hover:bg-[#0052b3] text-white text-xs font-bold font-montserrat uppercase tracking-wider transition-all flex items-center justify-center gap-1.5 cursor-pointer shadow-xs"
+                            >
+                              <Truck size={14} className="shrink-0" />
+                              <span className="truncate">Live Tracking</span>
+                            </button>
+
+                            <button
+                              type="button"
+                              onClick={() => {
+                                setSelectedOrderForDispute(order);
+                                setIsDisputeModalOpen(true);
+                              }}
+                              className="w-full py-2.5 rounded-xl bg-rose-50 hover:bg-rose-100 text-rose-700 border border-rose-200 text-xs font-bold font-montserrat uppercase tracking-wider transition-all flex items-center justify-center gap-1.5 cursor-pointer"
+                            >
+                              <RotateCcw size={14} className="shrink-0" />
+                              <span className="truncate">Return / Replace</span>
+                            </button>
+                          </div>
+                        ) : (
+                          <div className="grid grid-cols-2 gap-2">
+                            <button
+                              type="button"
+                              onClick={() => setSelectedOrderForTracking(order)}
+                              className="w-full py-2.5 rounded-xl bg-[#0066cc] hover:bg-[#0052b3] text-white text-xs font-bold font-montserrat uppercase tracking-wider transition-all flex items-center justify-center gap-1.5 cursor-pointer shadow-xs"
+                            >
+                              <Truck size={14} className="shrink-0" />
+                              <span className="truncate">Live Tracking</span>
+                            </button>
+
+                            <button
+                              type="button"
+                              onClick={() => setSelectedOrderForCancel(order)}
+                              className="w-full py-2.5 rounded-xl bg-rose-50 hover:bg-rose-100 text-rose-700 border border-rose-200 text-xs font-bold font-montserrat uppercase tracking-wider transition-all flex items-center justify-center gap-1.5 cursor-pointer"
+                            >
+                              <AlertCircle size={14} className="shrink-0" />
+                              <span className="truncate">Cancel Order</span>
+                            </button>
+                          </div>
+                        )}
 
                         <div className="grid grid-cols-3 gap-1.5">
                           <button
@@ -1169,31 +1257,40 @@ function AccountDashboardContent() {
                 </p>
 
                 <div className="flex flex-wrap items-center gap-2 mt-3 text-xs font-open-sans">
-                  <span className="px-2.5 py-0.5 rounded-full bg-emerald-50 border border-emerald-200 text-emerald-700 font-bold font-montserrat text-[11px]">
-                    ✓ Status: Active
-                  </span>
-                  <span className="text-slate-600 font-open-sans text-[11px]">
-                    Coverage: 365 Days From Dispatch
-                  </span>
+                  {hasPlacedOrder ? (
+                    <>
+                      <span className="px-2.5 py-0.5 rounded-full bg-emerald-50 border border-emerald-200 text-emerald-700 font-bold font-montserrat text-[11px]">
+                        ✓ Status: Active
+                      </span>
+                      <span className="text-slate-600 font-open-sans text-[11px]">
+                        Coverage: 365 Days From Dispatch
+                      </span>
+                    </>
+                  ) : (
+                    <>
+                      <span className="px-2.5 py-0.5 rounded-full bg-slate-100 border border-slate-200 text-slate-600 font-bold font-montserrat text-[11px]">
+                        Status: Inactive (No Orders Placed)
+                      </span>
+                      <span className="text-slate-500 font-open-sans text-[11px]">
+                        Warranty coverage activates automatically once machine order is placed
+                      </span>
+                    </>
+                  )}
                 </div>
 
-                {/* 3 Mandatory Requirements Notice */}
+                {/* Terms Notice */}
                 <div className="mt-3.5 p-3 bg-white/90 rounded-xl border border-amber-200/90 space-y-1.5 text-xs">
                   <span className="font-bold text-amber-950 font-montserrat uppercase text-[10.5px] tracking-wider block">
-                    3 Mandatory Terms for Warranty Registration, Claims &amp; Replacements:
+                    Terms for Warranty Registration, Claims &amp; Replacements:
                   </span>
                   <ul className="space-y-1 text-[11px] font-open-sans text-slate-700">
                     <li className="flex items-center gap-1.5">
                       <span className="w-1.5 h-1.5 rounded-full bg-amber-600 shrink-0" />
-                      <span><strong>1. Unboxing video</strong> of the washer system</span>
+                      <span><strong>Testing video</strong> of washer system along with vacuum (Mandatory)</span>
                     </li>
                     <li className="flex items-center gap-1.5">
-                      <span className="w-1.5 h-1.5 rounded-full bg-amber-600 shrink-0" />
-                      <span><strong>2. Testing video</strong> of washer system along with vacuum</span>
-                    </li>
-                    <li className="flex items-center gap-1.5">
-                      <span className="w-1.5 h-1.5 rounded-full bg-amber-600 shrink-0" />
-                      <span><strong>3. Customer Review &amp; Feedback</strong> video or comment</span>
+                      <span className="w-1.5 h-1.5 rounded-full bg-slate-400 shrink-0" />
+                      <span className="text-slate-600"><strong>Unboxing video</strong> of the washer system (Optional)</span>
                     </li>
                   </ul>
                 </div>
@@ -1341,24 +1438,36 @@ function AccountDashboardContent() {
               </div>
 
               {/* Ownership Summary Chips */}
-              <div className="grid grid-cols-3 gap-2 mt-4 pt-3 border-t border-slate-100 text-center">
-                <div className="bg-slate-50/80 rounded-xl p-2 border border-slate-200/60">
-                  <span className="text-[10px] font-bold uppercase text-slate-400 font-montserrat block">
-                    Orders
+              <div
+                className={`grid ${
+                  hasPlacedOrder ? "grid-cols-3" : "grid-cols-2"
+                } gap-2 mt-4 pt-3 border-t border-slate-100 text-center`}
+              >
+                <button
+                  type="button"
+                  onClick={() => setActiveTab("orders")}
+                  className="bg-slate-50/80 hover:bg-sky-50/80 hover:border-[#0066cc]/40 rounded-xl p-2 border border-slate-200/60 transition-all cursor-pointer group text-center"
+                  title="Click to view your orders"
+                >
+                  <span className="text-[10px] font-bold uppercase text-slate-400 group-hover:text-[#0066cc] font-montserrat flex items-center justify-center gap-1">
+                    <span>Orders</span>
+                    <ArrowRight size={10} className="transition-transform group-hover:translate-x-0.5" />
                   </span>
-                  <span className="text-xs sm:text-sm font-bold font-montserrat text-slate-900 mt-0.5 block">
-                    {totalOrdersCount} Placed
+                  <span className="text-xs sm:text-sm font-bold font-montserrat text-slate-900 group-hover:text-[#0066cc] mt-0.5 block">
+                    {totalOrdersCount} Placed {totalOrdersCount > 0 ? "→" : ""}
                   </span>
-                </div>
+                </button>
 
-                <div className="bg-slate-50/80 rounded-xl p-2 border border-slate-200/60">
-                  <span className="text-[10px] font-bold uppercase text-slate-400 font-montserrat block">
-                    Warranty
-                  </span>
-                  <span className="text-xs sm:text-sm font-bold font-montserrat text-emerald-600 mt-0.5 block">
-                    1-Year Active
-                  </span>
-                </div>
+                {hasPlacedOrder && (
+                  <div className="bg-slate-50/80 rounded-xl p-2 border border-slate-200/60">
+                    <span className="text-[10px] font-bold uppercase text-slate-400 font-montserrat block">
+                      Warranty
+                    </span>
+                    <span className="text-xs sm:text-sm font-bold font-montserrat text-emerald-600 mt-0.5 block">
+                      1-Year Active
+                    </span>
+                  </div>
+                )}
 
                 <div
                   className={`rounded-xl p-2 border ${
@@ -1398,6 +1507,153 @@ function AccountDashboardContent() {
                 <span className="font-medium">Profile and shipping details updated successfully!</span>
               </div>
             )}
+
+            {/* MY ORDERS PREVIEW IN PROFILE */}
+            <div className="bg-white border border-slate-200/90 rounded-2xl p-4 sm:p-5 shadow-xs space-y-3">
+              <div className="flex items-center justify-between border-b border-slate-100 pb-2.5">
+                <div className="flex items-center gap-2">
+                  <span className="text-[11px] font-bold uppercase tracking-wider text-slate-500 font-montserrat flex items-center gap-1.5">
+                    <Package size={13} className="text-[#0066cc]" />
+                    My Orders
+                  </span>
+                  <span className="text-[10px] font-bold font-montserrat px-1.5 py-0.2 rounded-full bg-sky-50 text-[#0066cc] border border-sky-100">
+                    {totalOrdersCount}
+                  </span>
+                </div>
+                {orders.length > 0 ? (
+                  <button
+                    type="button"
+                    onClick={() => setActiveTab("orders")}
+                    className="text-[11px] font-bold font-montserrat text-[#0066cc] hover:underline cursor-pointer flex items-center gap-1"
+                  >
+                    <span>View All ({orders.length})</span>
+                    <ArrowRight size={11} />
+                  </button>
+                ) : null}
+              </div>
+
+              {orders.length === 0 ? (
+                <div className="text-center py-4 px-3 bg-slate-50/50 rounded-xl border border-dashed border-slate-200">
+                  <Package size={22} className="text-slate-400 mx-auto mb-1.5" />
+                  <p className="text-xs text-slate-700 font-semibold font-montserrat">
+                    No orders found under +91 {user.phone}
+                  </p>
+                  <p className="text-[11px] text-slate-500 font-open-sans mt-0.5 max-w-sm mx-auto">
+                    If you placed an order with another mobile number, please log in with that number to view your order.
+                  </p>
+                  <Link
+                    href="/"
+                    className="mt-2.5 inline-flex items-center gap-1.5 text-xs font-bold font-montserrat text-white bg-[#0066cc] hover:bg-[#0052b3] px-3.5 py-1.5 rounded-lg transition-colors shadow-2xs"
+                  >
+                    <span>Browse Aquaforce Systems</span>
+                    <ArrowRight size={12} />
+                  </Link>
+                </div>
+              ) : (
+                <div className="space-y-2.5">
+                  {orders.slice(0, 2).map((ord) => {
+                    const firstItem = ord.items[0];
+                    const isYellow = firstItem?.color?.toLowerCase() === "yellow";
+                    const productImg = isYellow
+                      ? "/aquaforceforgigworkers/images/products/yellow/1.webp"
+                      : "/aquaforceforgigworkers/images/products/blue/1.webp";
+
+                    return (
+                      <div
+                        key={ord.id}
+                        className="bg-slate-50/70 border border-slate-200/70 rounded-xl p-3 flex flex-col sm:flex-row sm:items-center justify-between gap-3 hover:border-slate-300 transition-all"
+                      >
+                        <div className="flex items-center gap-3 min-w-0">
+                          <div className="relative w-12 h-12 rounded-lg bg-white border border-slate-200/80 overflow-hidden shrink-0 flex items-center justify-center p-0.5">
+                            <Image
+                              src={productImg}
+                              alt={firstItem?.productName || "Product"}
+                              fill
+                              sizes="48px"
+                              className="object-contain"
+                            />
+                          </div>
+                          <div className="min-w-0">
+                            <div className="flex items-center gap-1.5 flex-wrap">
+                              <span className="font-montserrat font-bold text-xs text-slate-900 truncate">
+                                {ord.id}
+                              </span>
+                              <span
+                                className={`text-[9px] font-bold uppercase tracking-wider px-1.5 py-0.2 rounded font-montserrat border ${
+                                  ord.orderStatus === "delivered"
+                                    ? "bg-emerald-50 border-emerald-200 text-emerald-700"
+                                    : ord.orderStatus === "cancelled"
+                                    ? "bg-rose-50 border-rose-200 text-rose-700"
+                                    : "bg-sky-50 border-sky-200 text-[#0066cc]"
+                                }`}
+                              >
+                                {ord.orderStatus === "delivered"
+                                  ? "Delivered"
+                                  : ord.orderStatus === "cancelled"
+                                  ? "Cancelled"
+                                  : ord.fulfillment?.waybill
+                                  ? "In-Transit"
+                                  : "Confirmed"}
+                              </span>
+                            </div>
+                            <div className="text-[11px] text-slate-600 font-open-sans truncate mt-0.5">
+                              {firstItem?.productName || "Aquaforce® 1400"} • ₹{ord.pricing.finalTotalInINR?.toLocaleString("en-IN")}
+                            </div>
+                            {ord.fulfillment?.waybill && (
+                              <div className="text-[10px] font-montserrat text-[#0066cc] font-medium mt-0.5">
+                                AWB: {ord.fulfillment.waybill} (Delhivery Express)
+                              </div>
+                            )}
+                          </div>
+                        </div>
+
+                        <div className="flex items-center gap-1.5 shrink-0 flex-wrap">
+                          <button
+                            type="button"
+                            onClick={() => setSelectedOrderForTracking(ord)}
+                            className="px-2.5 py-1.5 rounded-lg bg-[#0066cc] hover:bg-[#0052b3] text-white text-[11px] font-bold font-montserrat flex items-center gap-1 transition-all cursor-pointer shadow-2xs"
+                          >
+                            <Truck size={12} />
+                            <span>Track</span>
+                          </button>
+                          {ord.orderStatus !== "cancelled" && ord.orderStatus !== "delivered" && (
+                            <button
+                              type="button"
+                              onClick={() => setSelectedOrderForCancel(ord)}
+                              className="px-2.5 py-1.5 rounded-lg bg-rose-50 border border-rose-200 hover:bg-rose-100 text-rose-700 text-[11px] font-bold font-montserrat flex items-center gap-1 transition-all cursor-pointer"
+                            >
+                              <AlertCircle size={12} />
+                              <span>Cancel</span>
+                            </button>
+                          )}
+                          {ord.orderStatus === "delivered" && (
+                            <button
+                              type="button"
+                              onClick={() => {
+                                setSelectedOrderForDispute(ord);
+                                setIsDisputeModalOpen(true);
+                              }}
+                              className="px-2.5 py-1.5 rounded-lg bg-rose-50 border border-rose-200 hover:bg-rose-100 text-rose-700 text-[11px] font-bold font-montserrat flex items-center gap-1 transition-all cursor-pointer"
+                            >
+                              <RotateCcw size={12} />
+                              <span>Return</span>
+                            </button>
+                          )}
+                          <button
+                            type="button"
+                            onClick={() => setSelectedOrderForInvoice(ord)}
+                            className="px-2.5 py-1.5 rounded-lg bg-white border border-slate-200 hover:bg-slate-100 text-slate-700 text-[11px] font-bold font-montserrat flex items-center gap-1 transition-all cursor-pointer"
+                          >
+                            <FileText size={12} />
+                            <span>Invoice</span>
+                          </button>
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+              )}
+            </div>
 
             {/* EDIT PROFILE FORM */}
             {editingProfile ? (
@@ -1816,6 +2072,21 @@ function AccountDashboardContent() {
         onFileDispute={(ord) => {
           setSelectedOrderForDispute(ord);
           setIsDisputeModalOpen(true);
+        }}
+        onCancelOrder={(ord) => {
+          setSelectedOrderForCancel(ord);
+        }}
+      />
+
+      <CancelOrderModal
+        order={selectedOrderForCancel}
+        isOpen={Boolean(selectedOrderForCancel)}
+        customerPhone={user.phone}
+        onClose={() => setSelectedOrderForCancel(null)}
+        onOrderCancelled={(updatedOrder) => {
+          setOrders((prev) =>
+            prev.map((o) => (o.id === updatedOrder.id ? { ...o, ...updatedOrder } : o))
+          );
         }}
       />
 
