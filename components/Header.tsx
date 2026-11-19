@@ -162,7 +162,11 @@ export default function Header() {
         }`}
       >
         {/* PROMEC Brand Logo */}
-        <a href="#home" className="flex items-center group shrink-0 select-none cursor-pointer">
+        <a
+          href="https://www.promectools.in/"
+          className="flex items-center group shrink-0 select-none cursor-pointer transition-opacity hover:opacity-85"
+          aria-label="PROMEC Home"
+        >
           <div
             className={`relative transition-all duration-300 shrink-0 ${
               scrolled

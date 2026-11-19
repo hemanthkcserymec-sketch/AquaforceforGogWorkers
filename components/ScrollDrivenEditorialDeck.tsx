@@ -160,7 +160,11 @@ export default function ScrollDrivenEditorialDeck({
       {/* 1. SLIM MINIMALIST STICKY HEADER */}
       <header className="sticky top-0 z-50 w-full bg-black border-b border-white/10 px-4 sm:px-8 lg:px-12 h-16 sm:h-[72px] flex items-center justify-between">
         <div className="flex items-center gap-6 lg:gap-10">
-          <Link href="/" className="relative w-[130px] h-[30px] sm:w-[160px] sm:h-[34px] block shrink-0">
+          <a
+            href="https://www.promectools.in/"
+            className="relative w-[130px] h-[30px] sm:w-[160px] sm:h-[34px] block shrink-0 cursor-pointer transition-opacity hover:opacity-85"
+            aria-label="PROMEC Home"
+          >
             <Image
               src="/aquaforceforgigworkers/images/promec-logo.svg"
               alt="PROMEC"
@@ -169,7 +173,7 @@ export default function ScrollDrivenEditorialDeck({
               className="object-contain object-left"
               priority
             />
-          </Link>
+          </a>
         </div>
 
         {/* Existing Navigation Links */}

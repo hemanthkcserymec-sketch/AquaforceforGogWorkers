@@ -41,7 +41,11 @@ export default function LegalPageLayout({
 
             <div className="h-4 w-px bg-white/20 hidden xs:block" />
 
-            <Link href="/" className="relative w-[125px] h-[28px] sm:w-[155px] sm:h-[32px] block">
+            <a
+              href="https://www.promectools.in/"
+              className="relative w-[125px] h-[28px] sm:w-[155px] sm:h-[32px] block cursor-pointer transition-opacity hover:opacity-85"
+              aria-label="PROMEC Home"
+            >
               <Image
                 src="/aquaforceforgigworkers/images/promec-logo.svg"
                 alt="PROMEC"
@@ -50,7 +54,7 @@ export default function LegalPageLayout({
                 className="object-contain object-left"
                 priority
               />
-            </Link>
+            </a>
           </div>
 
           {/* Action Button */}
