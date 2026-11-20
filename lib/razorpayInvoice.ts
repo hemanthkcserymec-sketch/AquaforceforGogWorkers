@@ -42,12 +42,20 @@ export async function createAndIssueRazorpayInvoice(
     const razorpay = new Razorpay({ key_id, key_secret });
 
     const amountInPaise = order.payment.amountPaidInPaise || order.payment.amountRequiredInPaise;
+    const cleanPhone = (order.customer.phone || "").replace(/\D/g, "");
+    const formattedPhone = cleanPhone.length === 10 ? cleanPhone : cleanPhone.slice(-10);
+    const cleanStreet = (order.customer.shippingAddress || "Doorstep Address")
+      .replace(/[\r\n\t]+/g, ", ")
+      .replace(/\s{2,}/g, " ")
+      .trim()
+      .slice(0, 100);
+
     const customer = {
-      ...(order.customer.fullName ? { name: order.customer.fullName } : {}),
-      ...(order.customer.email ? { email: order.customer.email } : {}),
-      ...(order.customer.phone ? { contact: order.customer.phone } : {}),
+      ...(order.customer.fullName ? { name: order.customer.fullName.trim() } : {}),
+      ...(order.customer.email ? { email: order.customer.email.trim() } : {}),
+      ...(formattedPhone ? { contact: formattedPhone } : {}),
       billing_address: {
-        line1: order.customer.shippingAddress || "Doorstep Address",
+        line1: cleanStreet,
         city: order.customer.city || "City",
         state: order.customer.state || "State",
         postal_code: order.customer.pincode || "440016",
@@ -75,8 +83,8 @@ export async function createAndIssueRazorpayInvoice(
           hsn_code: "84243000",
         },
       ],
-      email_notify: process.env.RAZORPAY_INVOICE_EMAIL_NOTIFY === "true" ? 1 : 0,
-      sms_notify: 0,
+      email_notify: order.customer.email ? 1 : 0,
+      sms_notify: formattedPhone ? 1 : 0,
       notes: {
         orderId: order.id,
         invoiceNumber: order.id,
@@ -108,6 +116,25 @@ export async function createAndIssueRazorpayInvoice(
         console.log(`[Razorpay Invoice] Auto-issued Paid Invoice: ${invoiceId} for payment ${payId}`);
       } catch (issueErr: any) {
         console.warn(`[Razorpay Invoice] Issue step note:`, issueErr?.message || issueErr);
+      }
+
+      // Explicitly trigger notification dispatch via Razorpay API for immediate customer delivery
+      if (order.customer.email) {
+        try {
+          await (razorpay.invoices as any).notifyBy(invoiceId, "email");
+          console.log(`[Razorpay Invoice] Dispatched invoice email to ${order.customer.email} via Razorpay`);
+        } catch (notifyEmailErr: any) {
+          console.warn(`[Razorpay Invoice] notifyBy email warning:`, notifyEmailErr?.message || notifyEmailErr);
+        }
+      }
+
+      if (formattedPhone) {
+        try {
+          await (razorpay.invoices as any).notifyBy(invoiceId, "sms");
+          console.log(`[Razorpay Invoice] Dispatched invoice SMS to ${formattedPhone} via Razorpay`);
+        } catch (notifySmsErr: any) {
+          console.warn(`[Razorpay Invoice] notifyBy sms warning:`, notifySmsErr?.message || notifySmsErr);
+        }
       }
 
       const finalUrl = invoiceUrl || `https://rzp.io/i/${invoiceId}`;

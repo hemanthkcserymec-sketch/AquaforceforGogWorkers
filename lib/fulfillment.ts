@@ -207,31 +207,50 @@ export async function executeOrderFulfillment(
         year: "numeric",
       });
 
-      const fullAddress = `${order.customer.shippingAddress}, ${order.customer.city}, ${order.customer.state} - ${order.customer.pincode}`;
+      // Strict WhatsApp Cloud API parameter formatting: No newlines, tabs, or >= 4 consecutive spaces
+      const sanitizeWhatsAppParam = (val: any, fallback: string = "-"): string => {
+        if (val === undefined || val === null) return fallback;
+        const str = String(val)
+          .replace(/[\r\n\t]+/g, ", ")
+          .replace(/,\s*,+/g, ", ")
+          .replace(/\s{2,}/g, " ")
+          .trim();
+        return str.length > 0 ? str : fallback;
+      };
 
-      await fetch("https://backend.aisensy.com/campaign/t1/api/v2", {
+      const fullAddress = sanitizeWhatsAppParam(
+        `${order.customer.shippingAddress}, ${order.customer.city}, ${order.customer.state} - ${order.customer.pincode}`
+      );
+
+      const bannerUrl =
+        process.env.WHATSAPP_BANNER_IMAGE_URL ||
+        "https://promectools.in/aquaforceforgigworkers/images/order-confirmation-banner.png";
+
+      const waRes = await fetch("https://backend.aisensy.com/campaign/t1/api/v2", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
+        signal: AbortSignal.timeout(8000),
         body: JSON.stringify({
           apiKey: aisensyApiKey,
           campaignName: aisensyCampaign,
           destination,
-          userName: order.customer.fullName,
+          userName: sanitizeWhatsAppParam(order.customer.fullName, "Customer"),
           templateParams: [
-            order.customer.fullName,
-            `${primaryItem.productName} (${primaryItem.color})`,
-            String(primaryItem.quantity),
-            order.id,
+            sanitizeWhatsAppParam(order.customer.fullName, "Customer"),
+            sanitizeWhatsAppParam(`${primaryItem.productName} (${primaryItem.color})`, "AquaForce 1400"),
+            sanitizeWhatsAppParam(String(primaryItem.quantity), "1"),
+            sanitizeWhatsAppParam(order.id, "-"),
             fullAddress,
-            estimatedDelivery,
+            sanitizeWhatsAppParam(estimatedDelivery, "5-7 business days"),
           ],
           media: {
-            url: "https://files.catbox.moe/jpksbs.png",
+            url: bannerUrl,
             filename: "Promec Tools WhatsApp Template Image.png",
           },
         }),
       });
-      console.log("[Fulfillment] AiSensy WhatsApp notification dispatched.");
+      const waData = await waRes.json();
+      console.log("[Fulfillment] AiSensy WhatsApp notification dispatched:", waData);
     } catch (waErr: any) {
       console.error("[Fulfillment] AiSensy WhatsApp failed:", waErr.message);
     }
