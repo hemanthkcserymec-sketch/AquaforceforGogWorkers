@@ -95,7 +95,7 @@ export async function POST(req: Request) {
       process.env.GOOGLE_SHEET_ENQUIRY_URL ||
       process.env.GOOGLE_SHEET_MAIN_URL ||
       process.env.GOOGLE_SHEET_URL ||
-      "https://script.google.com/macros/s/AKfycbzDBUKCkZtvZXek5qWcPeh9wLB-1MRC-JdYVnBKSJpp6fdhYiWU36iQE0A4-Q1Nb7sZ/exec";
+      "https://script.google.com/macros/s/AKfycbw3g3cvD8EyWuaSIitndh3saEYpDZwieoyEFM2FJhGVxPcqIBUPobj_dUDkeE52QOV6/exec";
 
     if (webhookUrl) {
       try {

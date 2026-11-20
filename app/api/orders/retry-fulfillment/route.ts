@@ -94,7 +94,9 @@ export async function POST(req: Request) {
       try {
         const sheetUrl =
           process.env.GOOGLE_SHEET_PURCHASE_URL ||
-          "https://script.google.com/macros/s/AKfycbwqSxRQx9i_hjH3FK1I7fsfTkP-3KDV6ER-qVTrOJWfOi5O8woxard3Cw5A6yh4Qt4a/exec";
+          process.env.GOOGLE_SHEET_MAIN_URL ||
+          process.env.GOOGLE_SHEET_URL ||
+          "https://script.google.com/macros/s/AKfycbw3g3cvD8EyWuaSIitndh3saEYpDZwieoyEFM2FJhGVxPcqIBUPobj_dUDkeE52QOV6/exec";
         await fetch(sheetUrl, {
           method: "POST",
           headers: { "Content-Type": "application/json" },
