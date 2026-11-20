@@ -28,6 +28,8 @@ export async function POST(req: Request) {
     // Record verified signup lead into the Signups Google Sheet
     const signupsSheetUrl =
       process.env.GOOGLE_SHEET_SIGNUPS_URL ||
+      process.env.GOOGLE_SHEET_MAIN_URL ||
+      process.env.GOOGLE_SHEET_URL ||
       "https://script.google.com/macros/s/AKfycbwqSxRQx9i_hjH3FK1I7fsfTkP-3KDV6ER-qVTrOJWfOi5O8woxard3Cw5A6yh4Qt4a/exec";
 
     if (signupsSheetUrl) {
@@ -37,6 +39,7 @@ export async function POST(req: Request) {
           method: "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({
+            type: "SIGNUP",
             timestamp: new Date().toLocaleString("en-IN", { timeZone: "Asia/Kolkata" }),
             fullName: customerName,
             phone: cleanPhone,
