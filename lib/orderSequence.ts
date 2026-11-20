@@ -1,10 +1,11 @@
 import fs from "fs";
 import path from "path";
 import { getSupabase } from "./supabase";
+import Razorpay from "razorpay";
 
-const PREFIX = "AQUA-R/INV-";
-// Baseline starts at 1 because AQUA-R/INV-1 was already issued in Razorpay (order_TngOjjfbBHei28)
-const BASELINE_MAX = 1;
+const PREFIX = "AQUA-C/INV-";
+// Baseline starts at 3 because AQUA-C/INV-1, 2, 3 have already been issued in Razorpay
+const BASELINE_MAX = 3;
 
 interface OrderSequenceState {
   lastIssuedNumber: number;
@@ -50,8 +51,8 @@ function persistLocalSequenceState(state: OrderSequenceState): void {
 }
 
 /**
- * Scans Supabase promec_orders and local orders.json to discover the highest
- * existing sequential number matching AQUA-R/INV-<N>.
+ * Scans Razorpay invoices, Supabase promec_orders, and local orders.json to discover the highest
+ * existing sequential commercial number matching AQUA-C/INV-<N>.
  */
 export async function getHighestGigWorkerOrderNumber(): Promise<number> {
   const discoveredNumbers: number[] = [BASELINE_MAX];
@@ -62,7 +63,29 @@ export async function getHighestGigWorkerOrderNumber(): Promise<number> {
     discoveredNumbers.push(localState.lastIssuedNumber);
   }
 
-  // 2. Query Supabase promec_orders
+  // 2. Query live Razorpay invoices directly as authoritative source
+  try {
+    const key_id = (process.env.RAZORPAY_KEY_ID || process.env.NEXT_PUBLIC_RAZORPAY_KEY_ID || "").trim();
+    const key_secret = (process.env.RAZORPAY_KEY_SECRET || "").trim();
+    if (key_id && key_secret) {
+      const razorpay = new Razorpay({ key_id, key_secret });
+      const invoices = await razorpay.invoices.all({ count: 50 });
+      if (Array.isArray(invoices?.items)) {
+        for (const inv of invoices.items) {
+          const num = inv.invoice_number || inv.receipt || "";
+          const match = num.match(/^AQUA-C\/INV-(\d+)$/i);
+          if (match) {
+            const val = parseInt(match[1], 10);
+            if (!isNaN(val)) discoveredNumbers.push(val);
+          }
+        }
+      }
+    }
+  } catch (rzpErr) {
+    console.warn("[orderSequence] Razorpay invoice query note:", rzpErr);
+  }
+
+  // 3. Query Supabase promec_orders
   const supabase = getSupabase();
   if (supabase) {
     try {
@@ -74,7 +97,7 @@ export async function getHighestGigWorkerOrderNumber(): Promise<number> {
       if (!error && Array.isArray(data)) {
         for (const row of data) {
           if (typeof row?.id === "string") {
-            const match = row.id.match(/^AQUA-R\/INV-(\d+)$/i);
+            const match = row.id.match(/^AQUA-C\/INV-(\d+)$/i);
             if (match) {
               const num = parseInt(match[1], 10);
               if (!isNaN(num)) discoveredNumbers.push(num);
@@ -87,7 +110,7 @@ export async function getHighestGigWorkerOrderNumber(): Promise<number> {
     }
   }
 
-  // 3. Scan local data/orders.json fallback
+  // 4. Scan local data/orders.json fallback
   try {
     const ordersFilePath = path.join(process.cwd(), "data", "orders.json");
     if (fs.existsSync(ordersFilePath)) {
@@ -96,7 +119,7 @@ export async function getHighestGigWorkerOrderNumber(): Promise<number> {
       if (Array.isArray(list)) {
         for (const ord of list) {
           if (typeof ord?.id === "string") {
-            const match = ord.id.match(/^AQUA-R\/INV-(\d+)$/i);
+            const match = ord.id.match(/^AQUA-C\/INV-(\d+)$/i);
             if (match) {
               const num = parseInt(match[1], 10);
               if (!isNaN(num)) discoveredNumbers.push(num);
@@ -116,8 +139,8 @@ export async function getHighestGigWorkerOrderNumber(): Promise<number> {
 let sequenceMutex: Promise<any> = Promise.resolve();
 
 /**
- * Computes and reserves the next sequential Gig Workers Order ID (e.g. AQUA-R/INV-2, AQUA-R/INV-3, etc.)
- * Strictly follows the series AQUA-R/INV-1, 2, 3, 4, 5...
+ * Computes and reserves the next sequential Commercial Order ID (e.g. AQUA-C/INV-4, AQUA-C/INV-5, etc.)
+ * Strictly follows the series AQUA-C/INV-1, 2, 3, 4, 5...
  */
 export async function getNextGigWorkerOrderId(): Promise<string> {
   return new Promise<string>((resolve, reject) => {
@@ -135,10 +158,10 @@ export async function getNextGigWorkerOrderId(): Promise<string> {
           };
 
           persistLocalSequenceState(newState);
-          console.log(`[orderSequence] Allocated next gig worker order ID: ${nextId}`);
+          console.log(`[orderSequence] Allocated next commercial order ID: ${nextId}`);
           resolve(nextId);
         } catch (err) {
-          console.error("[orderSequence] Error allocating next order ID:", err);
+          console.error("[orderSequence] Error allocating next commercial order ID:", err);
           // Fallback timestamp if allocation fatally fails
           const fallbackId = `${PREFIX}${Date.now().toString().slice(-4)}`;
           resolve(fallbackId);
